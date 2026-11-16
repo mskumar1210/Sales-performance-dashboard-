@@ -1,0 +1,55 @@
+// =====================================================================
+// Power BI measures for the Sales Performance Dashboard
+// Model: Orders (orders_clean.csv) -> Date (dim_date.csv) on Orders[Order Date] = 'Date'[Date]
+// Rename the imported tables to "Orders" and "Date", mark 'Date' as the date table.
+// NOTE: written against the column names in data/orders_clean.csv; test in Power BI Desktop.
+// =====================================================================
+
+// ---------- Core KPIs ----------
+Total Sales = SUM ( Orders[Sales] )
+Total Profit = SUM ( Orders[Profit] )
+Profit Margin % = DIVIDE ( [Total Profit], [Total Sales] )
+Orders = DISTINCTCOUNT ( Orders[Order ID] )
+Customers = DISTINCTCOUNT ( Orders[Customer ID] )
+Avg Order Value = DIVIDE ( [Total Sales], [Orders] )
+Units Sold = SUM ( Orders[Quantity] )
+Avg Discount % = AVERAGE ( Orders[Discount] )
+
+// ---------- Time intelligence ----------
+Sales PY = CALCULATE ( [Total Sales], SAMEPERIODLASTYEAR ( 'Date'[Date] ) )
+Profit PY = CALCULATE ( [Total Profit], SAMEPERIODLASTYEAR ( 'Date'[Date] ) )
+Sales YoY % = DIVIDE ( [Total Sales] - [Sales PY], [Sales PY] )
+Profit YoY % = DIVIDE ( [Total Profit] - [Profit PY], ABS ( [Profit PY] ) )
+Sales YTD = TOTALYTD ( [Total Sales], 'Date'[Date] )
+Sales Rolling 3M =
+CALCULATE (
+    [Total Sales],
+    DATESINPERIOD ( 'Date'[Date], MAX ( 'Date'[Date] ), -3, MONTH )
+)
+
+// ---------- Target vs actual (what-if) ----------
+// There is no target in the source data, so this uses a growth target you choose (ASSUMPTION).
+// Create the parameter table via Modeling > New parameter, or with:
+// Growth Target = GENERATESERIES ( 0, 0.30, 0.05 )
+Growth Target Value = SELECTEDVALUE ( 'Growth Target'[Growth Target], 0.10 )
+Sales Target = [Sales PY] * ( 1 + [Growth Target Value] )
+Target Attainment % = DIVIDE ( [Total Sales], [Sales Target] )
+
+// ---------- Discount & profitability ----------
+Loss Making Lines = CALCULATE ( COUNTROWS ( Orders ), Orders[Profit] < 0 )
+% Lines Losing Money = DIVIDE ( [Loss Making Lines], COUNTROWS ( Orders ) )
+Profit on Discounts Over 20% = CALCULATE ( [Total Profit], Orders[Discount] > 0.2 )
+Profit Margin on Discounts Over 20% =
+DIVIDE (
+    CALCULATE ( [Total Profit], Orders[Discount] > 0.2 ),
+    CALCULATE ( [Total Sales], Orders[Discount] > 0.2 )
+)
+
+// ---------- Returns ----------
+Returned Orders = CALCULATE ( DISTINCTCOUNT ( Orders[Order ID] ), Orders[Returned] = "Yes" )
+Return Rate % = DIVIDE ( [Returned Orders], [Orders] )
+
+// ---------- Ranking & formatting helpers ----------
+Sub-Category Profit Rank = RANKX ( ALL ( Orders[Sub-Category] ), [Total Profit], , DESC )
+Profit Bar Colour = IF ( [Total Profit] < 0, "#E34948", "#2A78D6" )   // use in Conditional formatting > Field value
+Profit Arrow = IF ( [Profit YoY %] >= 0, "▲ ", "▼ " ) & FORMAT ( ABS ( [Profit YoY %] ), "0.0%" )
